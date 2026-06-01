@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prospect TFSA — Live Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0a0b0f; --bg2: #111318; --bg3: #1a1d25;
+    --border: rgba(255,255,255,0.07); --border2: rgba(255,255,255,0.12);
+    --text: #e8eaf0; --text2: #8b909e; --text3: #555b6a;
+    --green: #22c55e; --red: #ef4444; --amber: #f59e0b;
+    --blue: #3b82f6; --accent: #6366f1;
+    --font: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --mono: 'DM Mono', 'Fira Code', monospace;
+  }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); font-size: 14px; line-height: 1.5; min-height: 100vh; }
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap');
+
+  /* API KEY GATE */
+  .gate {
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 999; padding: 24px;
+  }
+  .gate-card {
+    background: var(--bg2); border: 1px solid var(--border2);
+    border-radius: 14px; padding: 32px 36px; max-width: 440px; width: 100%;
+  }
+  .gate-logo { font-size: 13px; font-family: var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--text3); margin-bottom: 20px; }
+  .gate-title { font-size: 20px; font-weight: 500; color: var(--text); margin-bottom: 8px; }
+  .gate-sub { font-size: 13px; color: var(--text3); line-height: 1.6; margin-bottom: 24px; }
+  .gate-sub a { color: var(--accent); text-decoration: none; }
+  .gate-sub a:hover { text-decoration: underline; }
+  .gate-label { font-size: 11px; font-family: var(--mono); letter-spacing: 0.08em; color: var(--text3); margin-bottom: 6px; display: block; }
+  .gate-input {
+    width: 100%; background: var(--bg3); border: 1px solid var(--border2);
+    border-radius: 8px; padding: 10px 14px; font-size: 14px;
+    font-family: var(--mono); color: var(--text); outline: none;
+    transition: border-color 0.15s; margin-bottom: 6px;
+  }
+  .gate-input:focus { border-color: var(--accent); }
+  .gate-hint { font-size: 11px; color: var(--text3); margin-bottom: 20px; line-height: 1.5; }
+  .gate-hint a { color: var(--accent); text-decoration: none; }
+  .gate-btn {
+    width: 100%; padding: 11px; border-radius: 8px;
+    border: none; background: var(--accent); color: #fff;
+    font-size: 13px; font-family: var(--mono); letter-spacing: 0.06em;
+    cursor: pointer; transition: opacity 0.15s;
+  }
+  .gate-btn:hover { opacity: 0.88; }
+  .gate-err { font-size: 12px; color: var(--red); margin-top: 10px; display: none; }
+  .gate-remember { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; font-size: 12px; color: var(--text3); cursor: pointer; }
+  .gate-remember input { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
+
+  /* HEADER */
+  .header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(10,11,15,0.92); backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+  }
+  .header-left { display: flex; align-items: center; gap: 12px; }
+  .logo { font-size: 15px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); }
+  .live-badge {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 10px; font-family: var(--mono); letter-spacing: 0.1em;
+    background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.25);
+    color: var(--green); padding: 2px 8px; border-radius: 4px;
+  }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 2s ease-in-out infinite; }
+  .live-dot.stale { background: var(--amber); animation: none; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .ts { font-size: 11px; font-family: var(--mono); color: var(--text3); }
+  .btn {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; font-family: var(--mono); letter-spacing: 0.06em;
+    padding: 6px 12px; border-radius: 6px;
+    border: 1px solid var(--border2); background: transparent;
+    color: var(--text2); cursor: pointer; transition: all 0.15s;
+  }
+  .btn:hover { background: var(--bg3); color: var(--text); }
+  .btn.spinning svg { animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .clear-btn { font-size: 10px; font-family: var(--mono); color: var(--text3); background: none; border: none; cursor: pointer; padding: 6px 8px; border-radius: 4px; }
+  .clear-btn:hover { color: var(--red); }
+
+  /* MAIN */
+  .main { max-width: 1100px; margin: 0 auto; padding: 24px 24px 60px; display: none; }
+
+  /* METRICS */
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .metric { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; }
+  .metric-label { font-size: 10px; font-family: var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--text3); margin-bottom: 6px; }
+  .metric-val { font-size: 20px; font-weight: 500; font-family: var(--mono); color: var(--text); }
+  .metric-val.pos { color: var(--green); }
+  .metric-val.neg { color: var(--red); }
+  .metric-sub { font-size: 11px; color: var(--text3); margin-top: 3px; }
+
+  /* PROGRESS */
+  .progress-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; }
+  .progress-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+  .progress-title { font-size: 10px; font-family: var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--text3); }
+  .progress-pct { font-size: 13px; font-family: var(--mono); font-weight: 500; color: var(--text); }
+  .progress-track { background: var(--bg3); border-radius: 4px; height: 6px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 4px; background: var(--green); transition: width 0.8s ease; }
+  .progress-labels { display: flex; justify-content: space-between; margin-top: 6px; }
+  .progress-labels span { font-size: 10px; font-family: var(--mono); color: var(--text3); }
+
+  /* SECTION */
+  .section-hd { font-size: 10px; font-family: var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--text3); margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+  .section-hd::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* TABLE */
+  .table-wrap { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: auto; margin-bottom: 20px; }
+  table { width: 100%; border-collapse: collapse; min-width: 600px; }
+  thead th { text-align: left; font-size: 10px; font-family: var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text3); padding: 10px 14px; border-bottom: 1px solid var(--border); font-weight: 400; }
+  thead th:not(:first-child) { text-align: right; }
+  tbody td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tbody td:not(:first-child) { text-align: right; font-family: var(--mono); font-size: 13px; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: rgba(255,255,255,0.02); }
+  .ticker-name { font-size: 13px; font-weight: 500; color: var(--text); }
+  .ticker-exch { font-size: 10px; color: var(--text3); margin-top: 1px; }
+  .pos { color: var(--green); }
+  .neg { color: var(--red); }
+  .manual-tag { font-size: 9px; background: var(--bg3); border: 1px solid var(--border2); border-radius: 3px; padding: 1px 4px; color: var(--text3); margin-left: 5px; vertical-align: middle; }
+  .dim { opacity: 0.4; }
+
+  /* MANUAL */
+  .manual-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 20px; }
+  .manual-note { font-size: 11px; color: var(--text3); margin-bottom: 12px; line-height: 1.6; }
+  .input-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .input-group label { display: block; font-size: 10px; font-family: var(--mono); letter-spacing: 0.08em; color: var(--text3); margin-bottom: 4px; }
+  .input-group input { width: 100%; background: var(--bg3); border: 1px solid var(--border2); border-radius: 6px; padding: 7px 10px; font-size: 13px; font-family: var(--mono); color: var(--text); outline: none; transition: border-color 0.15s; }
+  .input-group input:focus { border-color: var(--accent); }
+  .apply-btn { font-size: 11px; font-family: var(--mono); letter-spacing: 0.06em; padding: 7px 16px; border-radius: 6px; border: 1px solid var(--border2); background: var(--bg3); color: var(--text); cursor: pointer; transition: all 0.15s; }
+  .apply-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* CASH */
+  .cash-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+  .cash-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
+  .cash-label { font-size: 10px; font-family: var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text3); margin-bottom: 5px; }
+  .cash-val { font-size: 18px; font-weight: 500; font-family: var(--mono); color: var(--text); }
+  .cash-note { font-size: 10px; color: var(--text3); margin-top: 3px; }
+
+  /* WATCHLIST */
+  .watch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 10px; margin-bottom: 20px; }
+  .watch-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; transition: border-color 0.2s; }
+  .watch-card.alert-hit { border-color: var(--amber); }
+  .watch-sym { font-size: 13px; font-weight: 500; color: var(--text); margin-bottom: 2px; }
+  .watch-name { font-size: 10px; color: var(--text3); margin-bottom: 6px; }
+  .watch-price { font-size: 18px; font-weight: 500; font-family: var(--mono); color: var(--text); margin-bottom: 2px; }
+  .watch-chg { font-size: 12px; font-family: var(--mono); }
+  .watch-alert-lbl { font-size: 10px; color: var(--text3); margin-top: 6px; }
+  .alert-badge { display: inline-block; font-size: 9px; font-family: var(--mono); background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); color: var(--amber); border-radius: 3px; padding: 1px 5px; margin-top: 3px; }
+
+  /* CATALYSTS */
+  .catalyst-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 20px; }
+  .catalyst-row { display: flex; align-items: center; padding: 9px 14px; border-bottom: 1px solid var(--border); gap: 12px; }
+  .catalyst-row:last-child { border-bottom: none; }
+  .cat-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+  .cat-date { font-size: 11px; font-family: var(--mono); color: var(--text3); min-width: 70px; }
+  .cat-ticker { font-size: 11px; font-family: var(--mono); color: var(--accent); min-width: 60px; }
+  .cat-event { font-size: 12px; color: var(--text); flex: 1; }
+  .cat-pri { font-size: 9px; font-family: var(--mono); letter-spacing: 0.06em; }
+
+  /* FOOTER */
+  .footer { text-align: center; font-size: 11px; font-family: var(--mono); color: var(--text3); padding-top: 20px; }
+  .footer a { color: var(--text3); text-decoration: none; }
+  .footer a:hover { color: var(--text2); }
+
+  @media (max-width: 600px) {
+    .main { padding: 16px; }
+    .metrics { grid-template-columns: 1fr 1fr; }
+    .cash-row { grid-template-columns: 1fr; }
+    .gate-card { padding: 24px 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- API KEY GATE -->
+<div class="gate" id="gate">
+  <div class="gate-card">
+    <div class="gate-logo">Prospect TFSA</div>
+    <div class="gate-title">Enter your Finnhub API key</div>
+    <div class="gate-sub">
+      Your key is stored locally in your browser only — never sent anywhere except directly to Finnhub for price data.
+      Don't have a key? Get one free at <a href="https://finnhub.io" target="_blank">finnhub.io</a> (no credit card).
+    </div>
+    <label class="gate-label" for="key-input">Finnhub API key</label>
+    <input class="gate-input" id="key-input" type="password" placeholder="Paste your key here..." autocomplete="off" />
+    <div class="gate-hint">Your key looks like: <code style="color:var(--accent)">d8etugXXXXXXXXXXXXXXXXXX</code></div>
+    <label class="gate-remember">
+      <input type="checkbox" id="remember-key" checked />
+      Remember key in this browser
+    </label>
+    <button class="gate-btn" onclick="submitKey()">Connect to Finnhub →</button>
+    <div class="gate-err" id="gate-err">Invalid key or connection error. Please check and try again.</div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<div class="header" id="app-header" style="display:none;">
+  <div class="header-left">
+    <span class="logo">Prospect TFSA</span>
+    <div class="live-badge">
+      <div class="live-dot" id="dot"></div>
+      <span id="live-label">LIVE</span>
+    </div>
+  </div>
+  <div class="header-right">
+    <span class="ts" id="ts">—</span>
+    <button class="btn" id="refBtn" onclick="fetchAll()">
+      <svg id="refIcon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+      Refresh
+    </button>
+    <button class="clear-btn" onclick="clearKey()" title="Change API key">Change key</button>
+  </div>
+</div>
+
+<!-- MAIN DASHBOARD -->
+<div class="main" id="main">
+
+  <div class="metrics">
+    <div class="metric"><div class="metric-label">Portfolio (CAD)</div><div class="metric-val" id="m-total">—</div><div class="metric-sub">All holdings + cash</div></div>
+    <div class="metric"><div class="metric-label">Unrealized P&L</div><div class="metric-val" id="m-pnl">—</div><div class="metric-sub">All positions</div></div>
+    <div class="metric"><div class="metric-label">To breakeven</div><div class="metric-val" id="m-gap">—</div><div class="metric-sub">Target C$4,541.41</div></div>
+    <div class="metric"><div class="metric-label">NVDA today</div><div class="metric-val" id="m-nvda">—</div><div class="metric-sub">Largest position</div></div>
+    <div class="metric"><div class="metric-label">MRVL today</div><div class="metric-val" id="m-mrvl">—</div><div class="metric-sub">AI connectivity</div></div>
+    <div class="metric"><div class="metric-label">ORBX today</div><div class="metric-val" id="m-orbx">—</div><div class="metric-sub">SpaceX roadshow Jun 4</div></div>
+  </div>
+
+  <div class="progress-card">
+    <div class="progress-header">
+      <span class="progress-title">Breakeven recovery</span>
+      <span class="progress-pct" id="prog-pct">0.0%</span>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
+    <div class="progress-labels"><span>C$4,264.91 start</span><span>C$4,541.41 target</span></div>
+  </div>
+
+  <div class="section-hd">Holdings</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Ticker</th><th>Shares</th><th>Avg cost</th>
+          <th>Live price</th><th>Value</th><th>P&L $</th><th>P&L %</th><th>Day %</th>
+        </tr>
+      </thead>
+      <tbody id="holdings-body">
+        <tr><td colspan="8" style="text-align:center;padding:20px;font-family:var(--mono);font-size:12px;color:var(--text3);">Fetching live prices...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="manual-card">
+    <div class="manual-note">TSX prices require manual entry — Finnhub free tier covers US-listed stocks only. Update from your TradingView watchlist then click Apply.</div>
+    <div class="input-grid">
+      <div class="input-group"><label>ORBX (CAD)</label><input type="number" id="inp-orbx" step="0.01" placeholder="29.87"></div>
+      <div class="input-group"><label>XEQT (CAD)</label><input type="number" id="inp-xeqt" step="0.01" placeholder="44.50"></div>
+      <div class="input-group"><label>QSR.TO (CAD)</label><input type="number" id="inp-qsr" step="0.01" placeholder="103.00"></div>
+      <div class="input-group"><label>ATD (CAD)</label><input type="number" id="inp-atd" step="0.01" placeholder="77.79"></div>
+      <div class="input-group"><label>CAD/USD rate</label><input type="number" id="inp-fx" step="0.0001" placeholder="0.7247"></div>
+    </div>
+    <button class="apply-btn" onclick="applyManual()">Apply TSX prices</button>
+  </div>
+
+  <div class="section-hd">Cash</div>
+  <div class="cash-row">
+    <div class="cash-card"><div class="cash-label">CAD</div><div class="cash-val">C$152.00</div><div class="cash-note">Reserved — ATD limit at $76</div></div>
+    <div class="cash-card"><div class="cash-label">USD</div><div class="cash-val">~$188.88</div><div class="cash-note">CEG alert $265 / MU reserve</div></div>
+  </div>
+
+  <div class="section-hd">Watchlist</div>
+  <div class="watch-grid" id="watch-grid"></div>
+
+  <div class="section-hd">Catalyst calendar</div>
+  <div class="catalyst-card" id="catalysts"></div>
+
+  <div class="footer">
+    Prospect TFSA Dashboard &nbsp;·&nbsp; <a href="https://finnhub.io" target="_blank">Finnhub</a> live data &nbsp;·&nbsp; Auto-refreshes every 60s &nbsp;·&nbsp; Key stored in your browser only
+  </div>
+</div>
+
+<script>
+const BASE = 'https://finnhub.io/api/v1/quote';
+let API_KEY = '';
+
+const HOLDINGS_USD = [
+  { ticker: 'NVDA', exchange: 'NASDAQ', shares: 4.37,  avg: 213.27  },
+  { ticker: 'MRVL', exchange: 'NASDAQ', shares: 3.45,  avg: 204.825 },
+];
+
+const WATCHLIST = [
+  { ticker: 'SPCE', name: 'Virgin Galactic',  alert: 6.80,  dir: 'below', note: 'Jun 4 SpaceX roadshow' },
+  { ticker: 'TNDM', name: 'Tandem Diabetes',  alert: 17.00, dir: 'below', note: 'Wells Fargo upgrade $27' },
+  { ticker: 'MU',   name: 'Micron',           alert: 940,   dir: 'below', note: 'Earnings Jun 24' },
+  { ticker: 'CEG',  name: 'Constellation',    alert: 265,   dir: 'below', note: 'Secondary clearing' },
+  { ticker: 'SLS',  name: 'SELLAS Life',      alert: 8.00,  dir: 'below', note: 'Phase III imminent' },
+  { ticker: 'NOW',  name: 'ServiceNow',       alert: 122,   dir: 'below', note: 'Earnings Jul 29' },
+];
+
+const CATALYSTS = [
+  { date: 'Jun 2',   ticker: 'NVDA/MRVL', event: 'Computex continues — robotics + AI connectivity', pri: 'high' },
+  { date: 'Jun 3',   ticker: 'AVGO',      event: 'Broadcom Q2 earnings after close — AI read-through', pri: 'medium' },
+  { date: 'Jun 4',   ticker: 'NVDA',      event: 'Ex-dividend $0.25 × 4.37 = $1.09 incoming', pri: 'low' },
+  { date: 'Jun 4',   ticker: 'ORBX/SPCE', event: 'SpaceX roadshow begins — peak halo catalyst', pri: 'high' },
+  { date: 'Jun 11',  ticker: 'ORBX',      event: 'SpaceX IPO pricing night', pri: 'high' },
+  { date: '~Jun 12', ticker: 'SPCX',      event: 'SpaceX begins trading on Nasdaq', pri: 'high' },
+  { date: 'Jun 22',  ticker: 'ATD',       event: 'Couche-Tard Q4 + full year 2026 earnings', pri: 'medium' },
+  { date: 'Jun 23',  ticker: 'QSR',       event: 'Ex-dividend C$0.65 × 1.5 = C$0.98 incoming', pri: 'low' },
+  { date: 'Jun 24',  ticker: 'MU/Cash',   event: 'Micron Q3 earnings — post-dip entry opportunity', pri: 'high' },
+  { date: 'Jul 29',  ticker: 'NOW',       event: 'ServiceNow earnings', pri: 'medium' },
+  { date: 'Jul 30',  ticker: 'TNDM',      event: 'Tandem Diabetes earnings', pri: 'medium' },
+  { date: 'Aug 6',   ticker: 'QSR',       event: 'Restaurant Brands earnings', pri: 'medium' },
+  { date: 'Aug 20',  ticker: 'MRVL',      event: 'Marvell Q2 earnings', pri: 'high' },
+  { date: 'Aug 26',  ticker: 'NVDA',      event: 'NVIDIA Q2 earnings — major catalyst', pri: 'high' },
+];
+
+let manual = { orbx: 29.87, xeqt: 44.50, qsr: 103.00, atd: 77.79, fx: 0.7247 };
+let live = {};
+let refreshTimer = null;
+
+/* ── KEY GATE ── */
+function init() {
+  const saved = localStorage.getItem('finnhub_key');
+  if (saved) { API_KEY = saved; showDashboard(); fetchAll(); }
+}
+
+async function submitKey() {
+  const key = document.getElementById('key-input').value.trim();
+  if (!key) return;
+  document.getElementById('gate-err').style.display = 'none';
+  try {
+    const r = await fetch(`${BASE}?symbol=NVDA&token=${key}`);
+    const d = await r.json();
+    if (!d.c) throw new Error('bad key');
+    API_KEY = key;
+    if (document.getElementById('remember-key').checked) localStorage.setItem('finnhub_key', key);
+    showDashboard();
+    fetchAll();
+  } catch(e) {
+    document.getElementById('gate-err').style.display = 'block';
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && document.getElementById('gate').style.display !== 'none') submitKey();
+});
+
+function showDashboard() {
+  document.getElementById('gate').style.display = 'none';
+  document.getElementById('app-header').style.display = 'flex';
+  document.getElementById('main').style.display = 'block';
+  renderCatalysts();
+}
+
+function clearKey() {
+  localStorage.removeItem('finnhub_key');
+  API_KEY = '';
+  clearInterval(refreshTimer);
+  document.getElementById('gate').style.display = 'flex';
+  document.getElementById('app-header').style.display = 'none';
+  document.getElementById('main').style.display = 'none';
+  document.getElementById('key-input').value = '';
+}
+
+/* ── FETCH ── */
+async function fetchQuote(sym) {
+  const r = await fetch(`${BASE}?symbol=${sym}&token=${API_KEY}`);
+  if (!r.ok) throw new Error(r.status);
+  return r.json();
+}
+
+async function fetchAll() {
+  const btn = document.getElementById('refBtn');
+  const icon = document.getElementById('refIcon');
+  const dot = document.getElementById('dot');
+  btn.classList.add('spinning');
+  dot.className = 'live-dot stale';
+  document.getElementById('live-label').textContent = 'UPDATING';
+
+  const syms = [...HOLDINGS_USD.map(h => h.ticker), ...WATCHLIST.map(w => w.ticker)];
+  const results = await Promise.allSettled(syms.map(s => fetchQuote(s)));
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled' && r.value && r.value.c) live[syms[i]] = r.value;
+  });
+
+  renderHoldings(); renderWatchlist(); renderMetrics();
+  const now = new Date();
+  document.getElementById('ts').textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  dot.className = 'live-dot';
+  document.getElementById('live-label').textContent = 'LIVE';
+  btn.classList.remove('spinning');
+
+  clearInterval(refreshTimer);
+  refreshTimer = setInterval(fetchAll, 60000);
+}
+
+/* ── RENDER ── */
+const fmt  = (n, dp=2) => Number(n).toFixed(dp);
+const fmtS = (n, dp=2) => (n >= 0 ? '+' : '') + fmt(n, dp);
+const cls  = n => n >= 0 ? 'pos' : 'neg';
+
+function renderHoldings() {
+  let rows = '';
+  HOLDINGS_USD.forEach(h => {
+    const q = live[h.ticker];
+    const p = q ? q.c : null;
+    const dp = q ? q.dp : null;
+    const pnl = p ? (p - h.avg) * h.shares : null;
+    const pnlPct = p ? ((p - h.avg) / h.avg) * 100 : null;
+    const val = p ? p * h.shares : null;
+    rows += `<tr>
+      <td><div class="ticker-name">${h.ticker}</div><div class="ticker-exch">${h.exchange}</div></td>
+      <td>${h.shares}</td><td>$${fmt(h.avg)}</td>
+      <td>${p ? '$'+fmt(p) : '<span style="color:var(--text3)">—</span>'}</td>
+      <td>${val ? '$'+fmt(val) : '—'}</td>
+      <td class="${pnl ? cls(pnl) : ''}">${pnl ? fmtS(pnl) : '—'}</td>
+      <td class="${pnlPct ? cls(pnlPct) : ''}">${pnlPct ? fmtS(pnlPct)+'%' : '—'}</td>
+      <td class="${dp ? cls(dp) : ''}">${dp ? fmtS(dp)+'%' : '—'}</td>
+    </tr>`;
+  });
+
+  [
+    { t:'ORBX', ex:'TSX', sh:24.35, avg:29.59,  p:manual.orbx },
+    { t:'XEQT', ex:'TSX', sh:15.00, avg:44.34,  p:manual.xeqt },
+    { t:'QSR',  ex:'TSX', sh:1.50,  avg:100.86, p:manual.qsr  },
+  ].forEach(h => {
+    const pnl = (h.p - h.avg) * h.sh;
+    const pct = ((h.p - h.avg) / h.avg) * 100;
+    rows += `<tr>
+      <td><div class="ticker-name">${h.t}<span class="manual-tag">manual</span></div><div class="ticker-exch">${h.ex}</div></td>
+      <td>${h.sh}</td><td>C$${fmt(h.avg)}</td><td>C$${fmt(h.p)}</td>
+      <td>C$${fmt(h.p * h.sh)}</td>
+      <td class="${cls(pnl)}">${fmtS(pnl)}</td>
+      <td class="${cls(pct)}">${fmtS(pct)}%</td>
+      <td style="color:var(--text3)">—</td>
+    </tr>`;
+  });
+
+  rows += `<tr class="dim">
+    <td><div class="ticker-name">ATD<span class="manual-tag">limit $76</span></div><div class="ticker-exch">TSX</div></td>
+    <td>0</td><td>—</td><td>C$${fmt(manual.atd)}</td><td>—</td><td>—</td><td>—</td><td>—</td>
+  </tr>`;
+  document.getElementById('holdings-body').innerHTML = rows;
+}
+
+function renderWatchlist() {
+  let html = '';
+  WATCHLIST.forEach(w => {
+    const q = live[w.ticker];
+    const p = q ? q.c : null;
+    const dp = q ? q.dp : null;
+    const hit = p && ((w.dir === 'below' && p <= w.alert) || (w.dir === 'above' && p >= w.alert));
+    html += `<div class="watch-card ${hit ? 'alert-hit' : ''}">
+      <div class="watch-sym">${w.ticker}</div>
+      <div class="watch-name">${w.name}</div>
+      <div class="watch-price">${p ? '$'+fmt(p) : '—'}</div>
+      <div class="watch-chg ${dp ? cls(dp) : ''}">${dp ? fmtS(dp)+'%' : '—'}</div>
+      <div class="watch-alert-lbl">Alert: $${w.alert} ${w.dir}${hit ? '<br><span class="alert-badge">⚡ triggered</span>' : ''}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:4px;">${w.note}</div>
+    </div>`;
+  });
+  document.getElementById('watch-grid').innerHTML = html;
+}
+
+function renderMetrics() {
+  const fx = manual.fx;
+  let totalValCAD = 152.00 + 188.88 / fx;
+  let totalPnlCAD = 0;
+  HOLDINGS_USD.forEach(h => {
+    const q = live[h.ticker];
+    if (q && q.c) { totalValCAD += (q.c * h.shares) / fx; totalPnlCAD += ((q.c - h.avg) * h.shares) / fx; }
+  });
+  [
+    { p:manual.orbx, avg:29.59,  sh:24.35 },
+    { p:manual.xeqt, avg:44.34,  sh:15.00 },
+    { p:manual.qsr,  avg:100.86, sh:1.50  },
+  ].forEach(h => { totalValCAD += h.p * h.sh; totalPnlCAD += (h.p - h.avg) * h.sh; });
+
+  const gap = 4541.41 - totalValCAD;
+  const prog = Math.min(100, Math.max(0, ((276.50 - gap) / 276.50) * 100));
+  const nvdaQ = live['NVDA']; const mrvlQ = live['MRVL'];
+
+  document.getElementById('m-total').textContent = 'C$' + fmt(totalValCAD, 0);
+  const pEl = document.getElementById('m-pnl');
+  pEl.className = 'metric-val ' + cls(totalPnlCAD);
+  pEl.textContent = fmtS(totalPnlCAD) + ' CAD';
+  const gEl = document.getElementById('m-gap');
+  gEl.className = 'metric-val ' + (gap <= 0 ? 'pos' : 'neg');
+  gEl.textContent = gap <= 0 ? 'Reached ✓' : 'C$' + fmt(gap);
+  const nEl = document.getElementById('m-nvda');
+  nEl.className = 'metric-val ' + (nvdaQ ? cls(nvdaQ.dp) : '');
+  nEl.textContent = nvdaQ ? fmtS(nvdaQ.dp) + '%' : '—';
+  const mEl = document.getElementById('m-mrvl');
+  mEl.className = 'metric-val ' + (mrvlQ ? cls(mrvlQ.dp) : '');
+  mEl.textContent = mrvlQ ? fmtS(mrvlQ.dp) + '%' : '—';
+  const orbxPct = ((manual.orbx - 29.59) / 29.59) * 100;
+  const oEl = document.getElementById('m-orbx');
+  oEl.className = 'metric-val ' + cls(orbxPct);
+  oEl.textContent = fmtS(orbxPct) + '%';
+  document.getElementById('prog-pct').textContent = fmt(prog, 1) + '%';
+  document.getElementById('prog-fill').style.width = prog + '%';
+}
+
+function renderCatalysts() {
+  const pc = { high:'#ef4444', medium:'#f59e0b', low:'#22c55e' };
+  document.getElementById('catalysts').innerHTML = CATALYSTS.map(c =>
+    `<div class="catalyst-row">
+      <div class="cat-dot" style="background:${pc[c.pri]}"></div>
+      <div class="cat-date">${c.date}</div>
+      <div class="cat-ticker">${c.ticker}</div>
+      <div class="cat-event">${c.event}</div>
+      <div class="cat-pri" style="color:${pc[c.pri]}">${c.pri}</div>
+    </div>`
+  ).join('');
+}
+
+function applyManual() {
+  const v = (id, def) => { const n = parseFloat(document.getElementById(id).value); return isNaN(n) ? def : n; };
+  manual.orbx = v('inp-orbx', manual.orbx);
+  manual.xeqt = v('inp-xeqt', manual.xeqt);
+  manual.qsr  = v('inp-qsr',  manual.qsr);
+  manual.atd  = v('inp-atd',  manual.atd);
+  manual.fx   = v('inp-fx',   manual.fx);
+  renderHoldings(); renderMetrics();
+}
+
+init();
+</script>
+</body>
+</html>
